@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Data Quality Signatures Explorer</title>
+<style>
+:root{
+  --bg:#F5F7FA; --surface:#FFFFFF; --text:#1B2432; --muted:#5B6573; --border:#DDE2E9; --grid:#E3E7EC; --chip-off:#F1F4F8;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#0E1522; --surface:#182131; --text:#E8ECF2; --muted:#9AA6B8; --border:#2A3547; --grid:#263042; --chip-off:#1E293B; color-scheme:dark; }
+}
+:root[data-theme="dark"]{ --bg:#0E1522; --surface:#182131; --text:#E8ECF2; --muted:#9AA6B8; --border:#2A3547; --grid:#263042; --chip-off:#1E293B; color-scheme:dark; }
+html{ scroll-padding-top:env(safe-area-inset-top,0px); }
+*,*::before,*::after{ box-sizing:border-box; }
+body{ margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; line-height:1.45; }
+.wrap{ max-width:1240px; margin:0 auto; padding:20px 16px 28px; }
+h1{ font-size:clamp(22px,3.2vw,30px); margin:0 0 4px; letter-spacing:-.01em; }
+.sub{ color:var(--muted); margin:0 0 18px; font-size:15px; }
+.layout{ display:grid; grid-template-columns:1fr; gap:16px; }
+@media (min-width:960px){ .layout{ grid-template-columns:300px minmax(0,1fr); align-items:start; } }
+.card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; }
+.card h2{ font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; font-weight:700; }
+.tools{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.btn{ font:inherit; font-size:13px; font-weight:600; color:var(--text); background:var(--chip-off); border:1px solid var(--border); border-radius:999px; padding:6px 12px; cursor:pointer; }
+.btn:hover{ border-color:var(--muted); }
+.chips{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+@media (min-width:960px){ .chips{ grid-template-columns:1fr; } }
+.chip{ --c:#888; display:flex; align-items:center; gap:10px; width:100%; text-align:left; font:inherit; font-size:14px; font-weight:600; color:var(--muted);
+  background:var(--chip-off); border:1.5px solid var(--border); border-radius:10px; padding:8px 10px; cursor:pointer; min-height:40px; }
+.chip .dot{ flex:none; width:16px; height:16px; border-radius:50%; border:2.5px solid var(--c); background:transparent; }
+.chip .num{ flex:none; font-size:12px; opacity:.7; width:18px; }
+.chip[aria-pressed="true"]{ color:var(--text); border-color:var(--c); background:color-mix(in srgb, var(--c) 13%, var(--surface)); }
+.chip[aria-pressed="true"] .dot{ background:var(--c); }
+.chip:focus-visible,.btn:focus-visible{ outline:3px solid var(--c,#1F77B4); outline-offset:2px; }
+.chip.focus-ring{ box-shadow:0 0 0 2px var(--c); }
+.ref{ margin-bottom:8px; }
+.ref .dot{ border-style:dashed; }
+.hint{ margin:12px 2px 0; font-size:12.5px; color:var(--muted); }
+.chartbox{ position:relative; height:clamp(320px,52vh,470px); }
+.note{ margin:8px 2px 0; font-size:13px; color:var(--muted); min-height:20px; }
+.info{ margin-top:16px; }
+.info-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.sw{ width:14px; height:14px; border-radius:50%; flex:none; }
+.info-head h3{ margin:0; font-size:20px; }
+.info-head span.tag{ color:var(--muted); font-size:14px; }
+.cols{ display:grid; grid-template-columns:1fr; gap:12px; }
+@media (min-width:760px){ .cols{ grid-template-columns:repeat(3,1fr); } }
+.col{ background:var(--chip-off); border-radius:10px; padding:10px 12px; }
+.col b{ display:block; font-size:11.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.col p{ margin:0; font-size:14.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Data Quality Signatures Explorer</h1>
+  <p class="sub">Switch each of the 13 signatures on or off to see how it distorts a healthy signal. All data is simulated for illustration.</p>
+  <div class="layout">
+    <aside class="card" aria-label="Signature controls">
+      <h2>Signatures</h2>
+      <div class="tools">
+        <button class="btn" id="all">Show all</button>
+        <button class="btn" id="none">Hide all</button>
+        <button class="btn" id="reset">Reset</button>
+      </div>
+      <button class="chip ref" id="refChip" aria-pressed="true"><span class="dot"></span><span>Healthy reference</span></button>
+      <div class="chips" id="chips"></div>
+      <p class="hint">Click to toggle. Double-click to show a signature on its own. The panel below the chart explains the selected one.</p>
+    </aside>
+    <main>
+      <section class="card">
+        <div class="chartbox"><canvas id="cv" role="img" aria-label="Line chart comparing a healthy reference signal with the selected data quality signatures"></canvas></div>
+        <p class="note" id="note"></p>
+      </section>
+      <section class="card info" aria-live="polite">
+        <div class="info-head"><span class="sw" id="isw"></span><h3 id="iname"></h3><span class="tag" id="itag"></span></div>
+        <div class="cols">
+          <div class="col"><b>What you see</b><p id="ia"></p></div>
+          <div class="col"><b>Likely cause</b><p id="ib"></p></div>
+          <div class="col"><b>How to detect</b><p id="id"></p></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  // ---------- simulated data
+  var N = 96, seed = 11;
+  function rnd(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+  function r1(v){ return Math.round(v * 10) / 10; }
+  function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+  var base = [], walk = 0, i;
+  for (i = 0; i < N; i++){
+    walk = walk * 0.92 + (rnd() - 0.5) * 3;
+    base.push(r1(clamp(50 + 15 * Math.sin(2 * Math.PI * i / 40) + 9 * Math.sin(2 * Math.PI * i / 17 + 1) + walk + (rnd() - 0.5) * 7, 12, 92)));
+  }
+  function pts(arr){ return arr.map(function(y, k){ return { x: k + 1, y: y }; }); }
+  var stuckAt = [0, 22, 41, 63, 80], spikes = { 14: 190, 33: -80, 52: 170, 71: -90, 88: 205 };
+  var benfordExp = [1,2,3,4,5,6,7,8,9].map(function(d){ return r1(100 * Math.log10(1 + 1 / d)); });
+  var benfordObs = [12.4, 10.8, 11.9, 10.2, 11.6, 10.9, 11.3, 10.6, 10.3];
+
+  var SIG = [
+    { id:"gap", name:"Gap", color:"#E4572E", tag:"Samples go missing", data: pts(base.map(function(v,k){ return k >= 30 && k <= 47 ? null : v; })),
+      a:"Runs of missing samples; the line breaks where nothing was recorded.", b:"Comms dropout, power loss, logger restart or buffer overflow.", d:"Timestamp step above 2× the expected interval, or consecutive null values." },
+    { id:"flat", name:"Flatline", color:"#1F77B4", tag:"Zero variance for a long stretch", data: pts(base.map(function(v,k){ return k >= 55 && k <= 78 ? base[54] : v; })),
+      a:"A perfectly constant value for a long stretch, then normal movement resumes.", b:"Frozen register, lost link with the last value held, disabled input.", d:"Rolling variance of 0 (or range below the noise floor) over N consecutive samples." },
+    { id:"synth", name:"Synthetic / No Correlation", color:"#9B5DE5", tag:"Random scatter, no temporal structure", data: pts(base.map(function(){ return r1(20 + rnd() * 60); })),
+      a:"Random scatter with no trend, cycle or link to neighbouring samples.", b:"Fabricated or randomly generated values, shuffled records, a noise-only channel.", d:"Lag-1 autocorrelation near 0 and no correlation with related channels." },
+    { id:"benford", name:"Benford Deviation", color:"#F4A300", tag:"Leading digits are not natural", benford:true,
+      a:"Digit frequencies are flat instead of falling from about 30% (digit 1) to 5% (digit 9).", b:"Invented, manipulated or heavily rounded numbers; truncated ranges.", d:"Chi-square or MAD of digit shares against log10(1 + 1/d) above threshold." },
+    { id:"replay", name:"Replay / Duplicate", color:"#00A6A6", tag:"Old data played back as new", data: pts(base.map(function(v,k){ return base[10 + (k % 24)]; })),
+      a:"A block of values reappears exactly, sample for sample.", b:"Copy-paste backfill, replayed buffer, duplicated file import.", d:"Identical window hashes, or an autocorrelation peak near 1.0 at a fixed lag." },
+    { id:"smooth", name:"Over Smoothing", color:"#2E8B57", tag:"Too clean to be real", data: pts(base.map(function(v,k){ var s = 0, c = 0, j; for (j = k - 10; j <= k + 10; j++){ if (j >= 0 && j < N){ s += base[j]; c++; } } return r1(s / c); })),
+      a:"The trace is too clean: peaks, noise and fast dynamics are erased.", b:"Heavy filtering, a large averaging window, interpolation or resampling.", d:"Variance or high-frequency energy far below the sensor’s noise floor." },
+    { id:"gross", name:"Gross Channel", color:"#D00070", tag:"Values far outside the physical range", data: pts(base.map(function(v,k){ return spikes[k] !== undefined ? spikes[k] : v; })),
+      a:"Isolated readings orders of magnitude outside the plausible range (here 0 to 100).", b:"Unit or scale error, ADC glitch, wiring fault, corrupted record.", d:"Value beyond physical limits, or a robust z-score (MAD) above threshold." },
+    { id:"limit", name:"Limit Hugging", color:"#8B5E3C", tag:"Pinned to the upper and lower limits", data: pts(base.map(function(v){ return clamp(v, 40, 62); })),
+      a:"Peaks and troughs are cut flat at the same upper and lower values (here 40 and 62).", b:"Sensor or ADC saturation, clipping, a measuring range set too narrow.", d:"Large share of samples equal to the window minimum or maximum." },
+    { id:"int", name:"Integer Quantised", color:"#7CB518", tag:"Coarse whole-number steps", data: pts(base.map(function(v){ return Math.round(v / 10) * 10; })),
+      a:"A smooth process is recorded as a staircase of fixed steps (shown here with an exaggerated step of 10).", b:"Low-resolution ADC, rounding at export, integer-typed storage.", d:"Very few distinct values, all multiples of one step size." },
+    { id:"comb", name:"Alternating Comb", color:"#FF6F91", tag:"High-low-high-low on every sample", data: pts(base.map(function(v,k){ return r1(50 + (k % 2 ? 18 : -18) + (rnd() - 0.5) * 3); })),
+      a:"Values flip between a high and a low level on every sample, like comb teeth.", b:"Interleaved channels, multiplexer swap, odd/even sampling offset.", d:"Strongly negative lag-1 autocorrelation; spectral peak at Nyquist." },
+    { id:"stuck", name:"Struck (Stuck) Sensor", color:"#3D348B", tag:"Reading held while the process moves", data: pts(base.map(function(v,k){ var u = 0, s; for (s = 0; s < stuckAt.length; s++){ if (stuckAt[s] <= k) u = stuckAt[s]; } return base[u]; })),
+      a:"The value is held for long periods, then jumps to a new level.", b:"Sample-and-hold, stale cache, or a sensor stuck while the process moves.", d:"Long runs of identical values broken by rare step changes." },
+    { id:"zero", name:"All Zero", color:"#212529", darkColor:"#E9ECEF", tag:"Nothing but zeros", data: pts(base.map(function(){ return 0; })),
+      a:"Every sample is exactly zero across the whole window.", b:"Dead sensor, unconnected channel, default fill value, failed ingestion.", d:"Sum of absolute values equals 0 over the window." },
+    { id:"zheavy", name:"Zero Heavy", color:"#00B4D8", tag:"Real readings buried in zeros", data: pts(base.map(function(v){ return rnd() < 0.65 ? 0 : v; })),
+      a:"Genuine readings are interleaved with a high share of zeros.", b:"Dropouts logged as 0, intermittent connection, nulls replaced with 0.", d:"Zero share above the expected level (for example over 30%) while the process is non-zero." }
+  ];
+
+  // ---------- state
+  var visible = {}, refOn = true, focusId = "flat";
+  function reset(){ visible = { gap:true, flat:true, comb:false }; refOn = true; }
+  reset();
+
+  // ---------- theme helpers
+  var root = document.documentElement, mq = window.matchMedia("(prefers-color-scheme: dark)");
+  function isDark(){ var t = root.getAttribute("data-theme"); return t === "dark" || (t !== "light" && mq.matches); }
+  function css(v){ return getComputedStyle(root).getPropertyValue(v).trim(); }
+  function colorOf(s){ return isDark() && s.darkColor ? s.darkColor : s.color; }
+  function refColor(){ return isDark() ? "#A5AFBD" : "#8A94A3"; }
+
+  // ---------- chips
+  var chipsEl = document.getElementById("chips"), chipEls = {};
+  SIG.forEach(function(s, k){
+    var b = document.createElement("button");
+    b.className = "chip"; b.type = "button"; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = '<span class="num">' + (k + 1) + '</span><span class="dot"></span><span class="nm"></span>';
+    b.querySelector(".nm").textContent = s.name;
+    b.addEventListener("click", function(){ visible[s.id] = !visible[s.id]; setFocus(s.id); sync(); });
+    b.addEventListener("dblclick", function(){ visible = {}; visible[s.id] = true; setFocus(s.id); sync(); });
+    chipsEl.appendChild(b); chipEls[s.id] = b;
+  });
+  var refChip = document.getElementById("refChip");
+  refChip.addEventListener("click", function(){ refOn = !refOn; sync(); });
+  document.getElementById("all").onclick = function(){ SIG.forEach(function(s){ visible[s.id] = true; }); sync(); };
+  document.getElementById("none").onclick = function(){ visible = {}; sync(); };
+  document.getElementById("reset").onclick = function(){ reset(); setFocus("flat"); sync(); };
+
+  function setFocus(id){
+    focusId = id;
+    var s = SIG.filter(function(x){ return x.id === id; })[0];
+    document.getElementById("isw").style.background = colorOf(s);
+    document.getElementById("iname").textContent = s.name;
+    document.getElementById("itag").textContent = s.tag;
+    document.getElementById("ia").textContent = s.a;
+    document.getElementById("ib").textContent = s.b;
+    document.getElementById("id").textContent = s.d;
+    SIG.forEach(function(x){ chipEls[x.id].classList.toggle("focus-ring", x.id === id); });
+  }
+
+  // ---------- chart
+  var datasets = [{ label:"Healthy reference", data: pts(base), borderColor: refColor(), borderDash:[6,4], borderWidth:2, pointRadius:0, pointHoverRadius:3, tension:0, order:99 }];
+  var dsIndex = {};
+  SIG.forEach(function(s){
+    if (s.benford){
+      dsIndex[s.id] = [datasets.length, datasets.length + 1];
+      datasets.push({ label:"Benford observed", data: benfordObs, borderColor: s.color, borderWidth:2.5, pointRadius:3, tension:0, xAxisID:"x2", yAxisID:"y2", hidden:true });
+      datasets.push({ label:"Benford expected", data: benfordExp, borderColor: s.color, borderDash:[3,3], borderWidth:2, pointRadius:0, tension:0, xAxisID:"x2", yAxisID:"y2", hidden:true });
+    } else {
+      dsIndex[s.id] = [datasets.length];
+      datasets.push({ label:s.name, data:s.data, borderColor:s.color, borderWidth:2.5, pointRadius:0, pointHoverRadius:4, tension:0, spanGaps:false, hidden:true });
+    }
+  });
+
+  var limitsPlugin = { id:"limits", afterDatasetsDraw:function(ch){
+    var y = ch.scales.y, a = ch.chartArea, c = ch.ctx;
+    if (y.min >= 0 && y.max <= 100) return;
+    c.save(); c.setLineDash([2,4]); c.strokeStyle = css("--muted"); c.lineWidth = 1; c.fillStyle = css("--muted"); c.font = "11px system-ui,sans-serif";
+    [[0,"plausible range: lower limit"],[100,"plausible range: upper limit"]].forEach(function(l){ var py = y.getPixelForValue(l[0]); c.beginPath(); c.moveTo(a.left, py); c.lineTo(a.right, py); c.stroke(); c.fillText(l[1], a.left + 6, py - 4); });
+    c.restore(); } };
+
+  var chart = new Chart(document.getElementById("cv"), {
+    type:"line", data:{ datasets:datasets }, plugins:[limitsPlugin],
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:{ duration:200 },
+      interaction:{ mode:"index", intersect:false, axis:"x" },
+      plugins:{ legend:{ display:false },
+        tooltip:{ filter:function(it){ return it.dataset.xAxisID !== "x2"; },
+          callbacks:{ title:function(items){ return items.length ? "Sample " + items[0].parsed.x : ""; },
+            label:function(it){ var v = it.parsed.y; return " " + it.dataset.label + ": " + (v === null ? "missing" : v); } } } },
+      scales:{
+        x:{ type:"linear", min:1, max:N, grid:{ display:false }, ticks:{ maxTicksLimit:12 }, title:{ display:true, text:"Sample index" } },
+        y:{ min:-5, max:105, grid:{}, ticks:{}, title:{ display:true, text:"Value" } },
+        x2:{ type:"category", labels:["1","2","3","4","5","6","7","8","9"], position:"top", display:false, grid:{ display:false }, ticks:{}, title:{ display:true, text:"Leading digit (Benford)" } },
+        y2:{ type:"linear", position:"right", min:0, max:40, display:false, grid:{ drawOnChartArea:false }, ticks:{ callback:function(v){ return v + "%"; } }, title:{ display:true, text:"Leading-digit frequency" } }
+      }
+    }
+  });
+
+  function themeChart(){
+    var muted = css("--muted"), grid = css("--grid"), sc = chart.options.scales;
+    Chart.defaults.color = muted;
+    ["x","y","x2","y2"].forEach(function(k){ sc[k].ticks.color = muted; sc[k].title.color = muted; if (k === "y" || k === "y2") sc[k].grid.color = grid; });
+    chart.data.datasets[0].borderColor = refColor();
+    SIG.forEach(function(s){ dsIndex[s.id].forEach(function(n){ chart.data.datasets[n].borderColor = colorOf(s); }); });
+    document.getElementById("refChip").style.setProperty("--c", refColor());
+    SIG.forEach(function(s){ chipEls[s.id].style.setProperty("--c", colorOf(s)); });
+    setFocus(focusId);
+  }
+
+  function sync(){
+    chart.data.datasets[0].hidden = !refOn;
+    refChip.setAttribute("aria-pressed", String(refOn));
+    var grossOn = !!visible.gross, bOn = !!visible.benford;
+    SIG.forEach(function(s){
+      var on = !!visible[s.id];
+      chipEls[s.id].setAttribute("aria-pressed", String(on));
+      dsIndex[s.id].forEach(function(n){ chart.data.datasets[n].hidden = !on; });
+    });
+    chart.options.scales.y.min = grossOn ? -100 : -5;
+    chart.options.scales.y.max = grossOn ? 220 : 105;
+    chart.options.scales.x2.display = bOn; chart.options.scales.y2.display = bOn;
+    var note = [];
+    if (bOn) note.push("Benford uses the top axis (leading digit) and the right axis (frequency): digit 1 should be about 30%, digit 9 about 5%; the observed line is almost flat.");
+    if (grossOn) note.push("Dotted lines mark the plausible range (0 to 100); gross spikes land far outside it.");
+    document.getElementById("note").textContent = note.join(" ");
+    chart.update();
+  }
+
+  themeChart(); sync();
+  mq.addEventListener ? mq.addEventListener("change", function(){ themeChart(); chart.update(); }) : mq.addListener(function(){ themeChart(); chart.update(); });
+  new MutationObserver(function(){ themeChart(); chart.update(); }).observe(root, { attributes:true, attributeFilter:["data-theme"] });
+})();
+</script>
+</body>
+</html>
